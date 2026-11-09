@@ -3,3 +3,6 @@ out
 dist
 *.log
 .DS_Store
+
+# contains the local MCP access key
+.mcp.json
