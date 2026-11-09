@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import type { AppSettings } from '@shared/types'
 import { closeDb, openDb } from './db'
 import { registerIpc } from './ipc'
+import { stopMcp, syncMcp } from './mcp'
 import { startScheduler, stopScheduler } from './scheduler'
 import { getMediaPath, thumbPath } from './store/media'
 import { getAppSettings } from './store/settings'
@@ -103,7 +104,7 @@ function createTray(): void {
   tray.on('click', showWindow)
 }
 
-function applySettings(next: AppSettings, prev: AppSettings): void {
+async function applySettings(next: AppSettings, prev: AppSettings): Promise<void> {
   if (next.theme !== prev.theme) {
     const t = THEME[next.theme]
     mainWindow?.setBackgroundColor(t.bg)
@@ -112,6 +113,7 @@ function applySettings(next: AppSettings, prev: AppSettings): void {
   if (next.launchAtLogin !== prev.launchAtLogin && app.isPackaged) {
     app.setLoginItemSettings({ openAtLogin: next.launchAtLogin, args: ['--hidden'] })
   }
+  if (next.mcpEnabled !== prev.mcpEnabled || next.mcpPort !== prev.mcpPort) await syncMcp(next, prev)
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -138,6 +140,7 @@ if (!app.requestSingleInstanceLock()) {
 
     if (app.isPackaged) Menu.setApplicationMenu(null)
     registerIpc(applySettings)
+    void syncMcp(getAppSettings())
     createTray()
     createWindow(!process.argv.includes('--hidden'))
     startScheduler()
@@ -148,6 +151,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true
     stopScheduler()
+    void stopMcp()
   })
   app.on('will-quit', () => closeDb())
   // With "run in background" the window hides instead of closing, so this only fires when that is off.

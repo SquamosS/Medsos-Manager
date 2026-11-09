@@ -4,6 +4,7 @@ import type { AppSettings } from '@shared/types'
 import { getSummary, syncAnalytics } from './analytics'
 import { dataDir } from './db'
 import { notify } from './events'
+import { mcpInfo, regenerateMcpToken } from './mcp'
 import { cancelOAuth } from './oauth'
 import { getPlatform, getProvider, listPlatforms } from './platforms/registry'
 import type { AppCredentials } from './platforms/types'
@@ -46,7 +47,7 @@ const MEDIA_FILTERS = {
   ]
 }
 
-export function registerIpc(onSettingsChanged: (s: AppSettings, prev: AppSettings) => void): void {
+export function registerIpc(onSettingsChanged: (s: AppSettings, prev: AppSettings) => void | Promise<void>): void {
   handle('app:info', () => ({ version: app.getVersion(), dataDir: dataDir(), platform: process.platform }))
   handle('app:openExternal', async (url) => {
     if (!/^https:\/\//i.test(url)) throw new Error('Only https links can be opened.')
@@ -159,12 +160,19 @@ export function registerIpc(onSettingsChanged: (s: AppSettings, prev: AppSetting
   })
 
   handle('settings:get', () => getAppSettings())
-  handle('settings:set', (patch) => {
+  handle('settings:set', async (patch) => {
     const prev = getAppSettings()
     const next = patchAppSettings(patch)
-    onSettingsChanged(next, prev)
+    await onSettingsChanged(next, prev)
     notify('settings')
     return next
+  })
+
+  handle('mcp:info', () => mcpInfo(getAppSettings()))
+  handle('mcp:regenerateToken', async () => {
+    const info = await regenerateMcpToken(getAppSettings())
+    notify('settings')
+    return info
   })
 
   handle('sample:load', () => {

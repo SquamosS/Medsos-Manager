@@ -227,13 +227,33 @@ export interface AppSettings {
   theme: 'dark' | 'light'
   /** Posts overdue by more than this many minutes when the app wakes are marked "missed". */
   missedAfterMinutes: number
+  /** Local MCP server so an AI assistant (e.g. Claude Code) can operate the app. Off by default. */
+  mcpEnabled: boolean
+  /**
+   * When false (default) the assistant can only save drafts for live accounts; a person has to
+   * schedule or publish them in the app. When true it may schedule and publish on its own.
+   */
+  mcpAllowPublish: boolean
+  mcpPort: number
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   runInBackground: true,
   launchAtLogin: false,
   theme: 'dark',
-  missedAfterMinutes: 60
+  missedAfterMinutes: 60,
+  mcpEnabled: false,
+  mcpAllowPublish: false,
+  mcpPort: 38517
+}
+
+export interface McpInfo {
+  enabled: boolean
+  running: boolean
+  /** Endpoint the assistant connects to. */
+  url: string
+  token: string
+  error: string | null
 }
 
 export interface AppInfo {

@@ -5,6 +5,7 @@ import type {
   AppInfo,
   AppSettings,
   Media,
+  McpInfo,
   MediaMetaInput,
   PlatformId,
   PlatformInfo,
@@ -27,6 +28,9 @@ export interface IpcContract {
   /** Opens the browser sign-in and resolves once the account is connected (or rejects). */
   'accounts:connect': { args: [platform: PlatformId]; ret: Account }
   'accounts:cancelConnect': { args: []; ret: void }
+
+  'mcp:info': { args: []; ret: McpInfo }
+  'mcp:regenerateToken': { args: []; ret: McpInfo }
 
   'media:pick': { args: [kinds: 'video' | 'image' | 'any']; ret: string[] }
   'media:import': { args: [paths: string[]]; ret: Media[] }
