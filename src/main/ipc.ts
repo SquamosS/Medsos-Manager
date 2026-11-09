@@ -4,10 +4,13 @@ import type { AppSettings } from '@shared/types'
 import { getSummary, syncAnalytics } from './analytics'
 import { dataDir } from './db'
 import { notify } from './events'
-import { listPlatforms } from './platforms/registry'
+import { cancelOAuth } from './oauth'
+import { getPlatform, getProvider, listPlatforms } from './platforms/registry'
+import type { AppCredentials } from './platforms/types'
 import { clearSampleData, loadSampleData } from './sample'
 import { kickScheduler } from './scheduler'
-import { addDemoAccount, listAccounts, removeAccount } from './store/accounts'
+import { appCredentialsKey, getSecret, setSecret } from './secrets'
+import { addDemoAccount, listAccounts, removeAccount, upsertLiveAccount } from './store/accounts'
 import { importMedia, listMedia, removeMedia, setMediaMeta } from './store/media'
 import {
   deletePost,
@@ -63,6 +66,30 @@ export function registerIpc(onSettingsChanged: (s: AppSettings, prev: AppSetting
     removeAccount(id)
     notify('accounts', 'posts', 'analytics')
   })
+
+  handle('credentials:status', (platform) => {
+    const creds = getSecret<AppCredentials>(appCredentialsKey(platform))
+    return { configured: creds !== null, clientId: creds?.clientId ?? null }
+  })
+  handle('credentials:save', (platform, clientId, clientSecret) => {
+    getPlatform(platform)
+    const id = clientId.trim()
+    const secret = clientSecret.trim()
+    if (!id || !secret) throw new Error('Both the Client ID and the Client Secret are required.')
+    setSecret(appCredentialsKey(platform), { clientId: id, clientSecret: secret })
+  })
+  handle('accounts:connect', async (platform) => {
+    const provider = getProvider(platform)
+    if (!provider.connect) throw new Error(`${provider.info.name} sign-in is not available yet.`)
+    const creds = getSecret<AppCredentials>(appCredentialsKey(platform))
+    if (!creds) throw new Error('Save your developer credentials first.')
+    const connection = await provider.connect(creds)
+    const account = upsertLiveAccount(platform, connection)
+    notify('accounts')
+    void syncAnalytics().then(() => notify('analytics'))
+    return account
+  })
+  handle('accounts:cancelConnect', () => cancelOAuth())
 
   handle('media:pick', async (kinds) => {
     const win = BrowserWindow.getFocusedWindow() ?? undefined

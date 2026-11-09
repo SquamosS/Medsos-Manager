@@ -26,6 +26,12 @@ export function getPlatform(id: string): PlatformInfo {
   return p.info
 }
 
+export function getProvider(id: string): PlatformProvider {
+  const p = byId.get(id)
+  if (!p) throw new Error(`Unknown platform: ${id}`)
+  return p
+}
+
 export function driverFor(account: Account): PlatformDriver {
   const provider = byId.get(account.platform)
   if (!provider) throw new Error(`Unknown platform: ${account.platform}`)

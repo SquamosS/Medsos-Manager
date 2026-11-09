@@ -21,6 +21,12 @@ export interface IpcContract {
   'accounts:list': { args: []; ret: Account[] }
   'accounts:addDemo': { args: [platform: PlatformId, displayName: string]; ret: Account }
   'accounts:remove': { args: [id: string]; ret: void }
+  /** Developer credentials for a platform. The secret never leaves the main process. */
+  'credentials:status': { args: [platform: PlatformId]; ret: { configured: boolean; clientId: string | null } }
+  'credentials:save': { args: [platform: PlatformId, clientId: string, clientSecret: string]; ret: void }
+  /** Opens the browser sign-in and resolves once the account is connected (or rejects). */
+  'accounts:connect': { args: [platform: PlatformId]; ret: Account }
+  'accounts:cancelConnect': { args: []; ret: void }
 
   'media:pick': { args: [kinds: 'video' | 'image' | 'any']; ret: string[] }
   'media:import': { args: [paths: string[]]; ret: Media[] }

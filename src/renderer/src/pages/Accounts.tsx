@@ -1,19 +1,132 @@
-import { BookOpen, ExternalLink, Plus, Sparkles, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { BookOpen, ExternalLink, LogIn, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { PlatformInfo } from '@shared/types'
 import { PlatformIcon } from '@/components/PlatformIcon'
-import { Badge, Button, Card, Field, IconButton, Modal, PageHeader, inputClass } from '@/components/ui'
+import { Badge, Button, Card, Field, IconButton, Modal, PageHeader, Spinner, inputClass } from '@/components/ui'
 import { call, useAccounts } from '@/lib/api'
 import { usePlatformCtx } from '@/lib/platforms'
-import { attempt } from '@/lib/store'
+import { attempt, useApp } from '@/lib/store'
+
+/** Sign-in dialog: asks for developer credentials once, then hands over to the browser. */
+function ConnectModal({ platform, onClose, onOpenGuide }: { platform: PlatformInfo | null; onClose: () => void; onOpenGuide: (p: PlatformInfo) => void }): React.JSX.Element {
+  const [status, setStatus] = useState<{ configured: boolean; clientId: string | null } | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [waiting, setWaiting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const toast = useApp((s) => s.toast)
+
+  useEffect(() => {
+    if (!platform) return
+    setStatus(null)
+    setEditing(false)
+    setClientId('')
+    setClientSecret('')
+    setError(null)
+    setWaiting(false)
+    call('credentials:status', platform.id).then(setStatus, (e: Error) => setError(e.message))
+  }, [platform])
+
+  const close = (): void => {
+    if (waiting) void call('accounts:cancelConnect')
+    onClose()
+  }
+
+  const signIn = async (): Promise<void> => {
+    if (!platform) return
+    setError(null)
+    setWaiting(true)
+    try {
+      if (!status?.configured || editing) {
+        await call('credentials:save', platform.id, clientId, clientSecret)
+      }
+      const account = await call('accounts:connect', platform.id)
+      toast(`${account.displayName} connected`, 'success')
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setWaiting(false)
+    }
+  }
+
+  const needsCredentials = status !== null && (!status.configured || editing)
+
+  return (
+    <Modal
+      open={platform !== null}
+      onClose={close}
+      title={`Connect ${platform?.name ?? ''}`}
+      width={520}
+      footer={
+        <>
+          <Button onClick={close}>{waiting ? 'Cancel sign-in' : 'Close'}</Button>
+          <Button
+            variant="primary"
+            icon={<LogIn size={15} />}
+            loading={waiting}
+            disabled={status === null || (needsCredentials && (!clientId.trim() || !clientSecret.trim()))}
+            onClick={() => void signIn()}
+          >
+            {needsCredentials ? 'Save and sign in' : 'Sign in'}
+          </Button>
+        </>
+      }
+    >
+      {status === null ? (
+        <Spinner />
+      ) : (
+        <div className="space-y-4 text-sm">
+          {waiting ? (
+            <p className="rounded-lg bg-accent-soft px-3 py-2.5 text-accent">Finish signing in in your browser. This window updates by itself when you are done.</p>
+          ) : needsCredentials ? (
+            <>
+              <p className="text-muted">
+                Paste the developer credentials you created for {platform?.name}. They are stored encrypted on this PC and never shown again.{' '}
+                {platform && (
+                  <button className="text-accent underline" onClick={() => onOpenGuide(platform)}>
+                    Show the setup guide
+                  </button>
+                )}
+              </p>
+              <Field label="Client ID">
+                <input autoFocus className={inputClass} value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="1234567890-abc….apps.googleusercontent.com" spellCheck={false} />
+              </Field>
+              <Field label="Client Secret">
+                <input className={inputClass} type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="GOCSPX-…" spellCheck={false} autoComplete="off" />
+              </Field>
+            </>
+          ) : (
+            <>
+              <p className="text-muted">
+                Your browser opens so you can choose the {platform?.name} account and approve access. Medsos Manager never sees your password.
+              </p>
+              <p className="text-xs text-muted">
+                Using credentials for <span className="text-fg">{status.clientId}</span>.{' '}
+                <button className="text-accent underline" onClick={() => setEditing(true)}>
+                  Change
+                </button>
+              </p>
+            </>
+          )}
+          {error && <p className="rounded-lg border border-bad/40 bg-bad/5 px-3 py-2 text-bad">{error}</p>}
+        </div>
+      )}
+    </Modal>
+  )
+}
 
 export function Accounts(): React.JSX.Element {
   const { list: platforms } = usePlatformCtx()
   const { data: accounts } = useAccounts()
   const [guide, setGuide] = useState<PlatformInfo | null>(null)
   const [adding, setAdding] = useState<PlatformInfo | null>(null)
+  const [connecting, setConnecting] = useState<PlatformInfo | null>(null)
   const [name, setName] = useState('')
   const [removing, setRemoving] = useState<string | null>(null)
+  const livePlatforms = platforms.filter((p) => p.liveAvailable)
+  const pendingPlatforms = platforms.filter((p) => !p.liveAvailable)
 
   const addDemo = async (): Promise<void> => {
     if (!adding) return
@@ -35,10 +148,12 @@ export function Accounts(): React.JSX.Element {
       />
 
       <Card className="mb-6 border-warn/40 bg-warn/5 p-4 text-sm">
-        <strong className="text-warn">Live connections are not enabled yet.</strong>{' '}
+        <strong className="text-warn">
+          {livePlatforms.length > 0 ? `${livePlatforms.map((p) => p.name).join(', ')} can be connected for real.` : 'Live connections are not enabled yet.'}
+        </strong>{' '}
         <span className="text-muted">
-          YouTube, Instagram and TikTok publishing is added in the next phases. Until then, <b className="text-fg">demo accounts</b> let you try the full workflow:
-          scheduling, the calendar and analytics all work, but nothing is sent to a real platform and the numbers are simulated.
+          {pendingPlatforms.length > 0 && <>{pendingPlatforms.map((p) => p.name).join(' and ')} {pendingPlatforms.length > 1 ? 'are' : 'is'} added in the next phases. </>}
+          <b className="text-fg">Demo accounts</b> let you try the full workflow without posting anywhere: nothing is sent to a real platform and their numbers are simulated.
         </span>
       </Card>
 
@@ -64,6 +179,12 @@ export function Accounts(): React.JSX.Element {
                       <div className="truncate text-xs text-muted">{a.handle}</div>
                     </div>
                     {a.mode === 'demo' && <Badge tone="warn">Demo</Badge>}
+                    {a.mode === 'live' && a.status === 'connected' && <Badge tone="accent">Live</Badge>}
+                    {a.mode === 'live' && a.status !== 'connected' && (
+                      <Button size="sm" variant="primary" onClick={() => setConnecting(p)} title="The sign-in expired. Sign in again to keep posting.">
+                        Reconnect
+                      </Button>
+                    )}
                     <IconButton label={`Remove ${a.displayName}`} onClick={() => setRemoving(a.id)}>
                       <Trash2 size={15} />
                     </IconButton>
@@ -72,7 +193,7 @@ export function Accounts(): React.JSX.Element {
               </div>
 
               <div className="mt-auto flex flex-wrap gap-2">
-                <Button size="sm" disabled={!p.liveAvailable} title={p.liveAvailable ? undefined : 'Coming in a later phase'} icon={<ExternalLink size={14} />}>
+                <Button size="sm" disabled={!p.liveAvailable} title={p.liveAvailable ? undefined : 'Coming in a later phase'} icon={<ExternalLink size={14} />} onClick={() => setConnecting(p)}>
                   Connect
                 </Button>
                 <Button size="sm" icon={<Plus size={14} />} onClick={() => setAdding(p)}>
@@ -86,6 +207,15 @@ export function Accounts(): React.JSX.Element {
           )
         })}
       </div>
+
+      <ConnectModal
+        platform={connecting}
+        onClose={() => setConnecting(null)}
+        onOpenGuide={(p) => {
+          setConnecting(null)
+          setGuide(p)
+        }}
+      />
 
       <Modal
         open={adding !== null}

@@ -98,6 +98,15 @@ const MIGRATIONS: string[] = [
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  `,
+  // v2 — live accounts: remote channel id + encrypted credential store
+  `
+  ALTER TABLE accounts ADD COLUMN remote_id TEXT;
+
+  CREATE TABLE secrets (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
   `
 ]
 

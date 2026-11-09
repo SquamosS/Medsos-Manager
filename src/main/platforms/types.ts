@@ -26,11 +26,28 @@ export interface PlatformDriver {
   fetchAccountMetrics(req: { account: Account; asOf: Date }): Promise<{ followers: number }>
 }
 
+/** Developer credentials the user creates once per platform (e.g. a Google OAuth client). */
+export interface AppCredentials {
+  clientId: string
+  clientSecret: string
+}
+
+/** What a successful sign-in returns. Tokens are stored encrypted, keyed by the new account id. */
+export interface LiveConnection {
+  /** Stable id on the platform (e.g. YouTube channel id), used to recognise a reconnect. */
+  remoteId: string
+  displayName: string
+  handle: string
+  tokens: { accessToken: string; refreshToken: string; expiresAt: number }
+}
+
 /**
  * A platform plugin: static description (shown in the UI and used for validation) plus an optional
- * live driver. Until a live driver exists, only demo accounts can be added for the platform.
+ * live driver and sign-in flow. Without them, only demo accounts can be added for the platform.
  */
 export interface PlatformProvider {
   info: PlatformInfo
   createLiveDriver?: () => PlatformDriver
+  /** Runs the sign-in flow (usually in the browser) and resolves with the connected account's identity. */
+  connect?: (creds: AppCredentials) => Promise<LiveConnection>
 }

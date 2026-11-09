@@ -1,6 +1,8 @@
 import type { Account, AccountMode, AccountStatus } from '@shared/types'
 import { getDb, tx } from '../db'
 import { getPlatform } from '../platforms/registry'
+import type { LiveConnection } from '../platforms/types'
+import { accountTokensKey, deleteSecret, setSecret } from '../secrets'
 import { newId, nowIso } from '../util'
 
 interface AccountRow {
@@ -47,10 +49,40 @@ export function addDemoAccount(platform: string, displayName: string, createdAt 
   return getAccount(id) as Account
 }
 
+export function setAccountStatus(id: string, status: AccountStatus): void {
+  getDb().prepare('UPDATE accounts SET status = ? WHERE id = ?').run(status, id)
+}
+
+/**
+ * Adds a signed-in account, or refreshes it when the same remote account (e.g. the same YouTube
+ * channel) is connected again. Tokens are stored encrypted, never in the accounts table.
+ */
+export function upsertLiveAccount(platform: string, conn: LiveConnection): Account {
+  getPlatform(platform)
+  const db = getDb()
+  const existing = db.prepare("SELECT id FROM accounts WHERE platform = ? AND mode = 'live' AND remote_id = ?").get(platform, conn.remoteId) as unknown as
+    | { id: string }
+    | undefined
+  const id = existing?.id ?? newId()
+  tx(() => {
+    if (existing) {
+      db.prepare("UPDATE accounts SET display_name = ?, handle = ?, status = 'connected' WHERE id = ?").run(conn.displayName, conn.handle, id)
+    } else {
+      db.prepare(
+        `INSERT INTO accounts (id, platform, display_name, handle, mode, status, created_at, remote_id)
+         VALUES (?, ?, ?, ?, 'live', 'connected', ?, ?)`
+      ).run(id, platform, conn.displayName, conn.handle, nowIso(), conn.remoteId)
+    }
+    setSecret(accountTokensKey(id), conn.tokens)
+  })
+  return getAccount(id) as Account
+}
+
 /** Removes an account and its post targets. Posts left with no targets are deleted too. */
 export function removeAccount(id: string): void {
   const db = getDb()
   tx(() => {
+    deleteSecret(accountTokensKey(id))
     const affected = db.prepare('SELECT DISTINCT post_id FROM post_targets WHERE account_id = ?').all(id) as unknown as {
       post_id: string
     }[]
