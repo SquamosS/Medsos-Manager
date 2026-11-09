@@ -264,16 +264,18 @@ export const youtube: PlatformProvider = {
     setupGuide: {
       title: 'Connect YouTube',
       steps: [
-        'Open the Google Cloud Console and create a new project (any name).',
-        'In "APIs & Services → Library", enable "YouTube Data API v3".',
-        'Under "OAuth consent screen" (called "Google Auth Platform" in newer consoles), choose External and fill in the app name and your email.',
-        'Add your own Google account as a Test user. Then click "Publish app" so the status is "In production": while it stays in "Testing", Google signs you out of the app every 7 days. An unverified app is fine for your own account; you only click through a warning once.',
-        'Under "Credentials", create an OAuth client ID of type "Desktop app".',
-        'Copy the Client ID and Client Secret, press Connect here, and paste them in. They are stored encrypted on this PC.'
+        'Use button 1 below: Create a new project (any name, e.g. "Medsos Manager"). Make sure it is selected in the project picker at the top.',
+        'Use button 2 below: Press "Enable" on YouTube Data API v3.',
+        'Use button 3 below: Open the OAuth consent screen (Google Auth Platform). Choose "External", enter an app name and your email, and finish the wizard.',
+        'In the same area, open "Audience": add your own Google account under Test users, then press "Publish app" and confirm, so the status becomes "In production". If it stays in "Testing", Google signs you out of the app every 7 days. An unverified app is fine for your own account; you only click through a warning once.',
+        'Use button 4 below: Open Credentials, press "Create credentials → OAuth client ID", choose application type "Desktop app", and create it.',
+        'Copy the Client ID and Client Secret shown, press Connect here, and paste them in. They are stored encrypted on this PC.'
       ],
       links: [
-        { label: 'Google Cloud Console', url: 'https://console.cloud.google.com/' },
-        { label: 'YouTube Data API overview', url: 'https://developers.google.com/youtube/v3/getting-started' }
+        { label: '1 · Create project', url: 'https://console.cloud.google.com/projectcreate' },
+        { label: '2 · Enable YouTube API', url: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com' },
+        { label: '3 · Consent screen', url: 'https://console.cloud.google.com/auth/overview' },
+        { label: '4 · Create credentials', url: 'https://console.cloud.google.com/apis/credentials' }
       ],
       caveat:
         "Two limits to know. New API projects that have not passed Google's audit can have uploaded videos locked to private (apply for the audit once everything works). The default quota is 10,000 units a day and one upload costs 1,600, so roughly 6 uploads per day."
