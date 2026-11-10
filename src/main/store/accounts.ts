@@ -13,10 +13,12 @@ interface AccountRow {
   mode: string
   status: string
   created_at: string
+  remote_id: string | null
 }
 
 const toAccount = (r: AccountRow): Account => ({
   id: r.id,
+  remoteId: r.remote_id ?? null,
   platform: r.platform,
   displayName: r.display_name,
   handle: r.handle,

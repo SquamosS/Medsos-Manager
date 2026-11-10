@@ -52,6 +52,12 @@ function ConnectModal({ platform, onClose, onOpenGuide }: { platform: PlatformIn
   }
 
   const needsCredentials = status !== null && (!status.configured || editing)
+  const labels = platform?.credentialLabels ?? {
+    id: 'Client ID',
+    secret: 'Client Secret',
+    idPlaceholder: '1234567890-abc….apps.googleusercontent.com',
+    secretPlaceholder: 'GOCSPX-…'
+  }
 
   return (
     <Modal
@@ -90,11 +96,11 @@ function ConnectModal({ platform, onClose, onOpenGuide }: { platform: PlatformIn
                   </button>
                 )}
               </p>
-              <Field label="Client ID">
-                <input autoFocus className={inputClass} value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="1234567890-abc….apps.googleusercontent.com" spellCheck={false} />
+              <Field label={labels.id}>
+                <input autoFocus className={inputClass} value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={labels.idPlaceholder} spellCheck={false} />
               </Field>
-              <Field label="Client Secret">
-                <input className={inputClass} type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="GOCSPX-…" spellCheck={false} autoComplete="off" />
+              <Field label={labels.secret}>
+                <input className={inputClass} type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder={labels.secretPlaceholder} spellCheck={false} autoComplete="off" />
               </Field>
             </>
           ) : (

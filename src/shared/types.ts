@@ -41,6 +41,8 @@ export interface PlatformCapabilities {
   descriptionMax: number
   maxHashtags?: number
   supportsThumbnail: boolean
+  /** Formats real (live) accounts can publish, when narrower than `formats` (demo accounts accept all). */
+  liveFormats?: ContentFormat[]
   /** Extra platform-specific settings shown in the composer. */
   options: OptionField[]
 }
@@ -55,6 +57,8 @@ export interface PlatformInfo {
   setupGuide: { title: string; steps: string[]; links: { label: string; url: string }[]; caveat?: string }
   /** True once a real (non-demo) integration exists for this platform. */
   liveAvailable: boolean
+  /** How the platform names its developer credentials, for the connect form. */
+  credentialLabels?: { id: string; secret: string; idPlaceholder: string; secretPlaceholder: string }
 }
 
 export type AccountMode = 'demo' | 'live'
@@ -62,6 +66,8 @@ export type AccountStatus = 'connected' | 'needs_reauth' | 'error'
 
 export interface Account {
   id: string
+  /** Id on the platform (YouTube channel id, Instagram user id). Null for demo accounts. */
+  remoteId: string | null
   platform: PlatformId
   displayName: string
   handle: string

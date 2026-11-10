@@ -1,3 +1,4 @@
+import { FORMAT_LABELS } from '@shared/types'
 import type {
   ContentFormat,
   Post,
@@ -127,6 +128,13 @@ export function assertPublishable(post: Post): void {
     const account = getAccount(target.accountId)
     if (!account) throw new Error('One of the selected accounts no longer exists.')
     const platform = getPlatform(target.platform)
+    const live = platform.capabilities.liveFormats
+    if (account.mode === 'live' && live && !live.includes(post.format)) {
+      problems.push({
+        severity: 'error',
+        message: `${platform.name}: ${account.displayName} is a real account, which can only publish ${live.map((f) => FORMAT_LABELS[f].toLowerCase()).join(', ')} posts for now.`
+      })
+    }
     for (const issue of validateForPlatform(platform, post.format, media, target)) {
       if (issue.severity === 'error') problems.push({ ...issue, message: `${platform.name}: ${issue.message}` })
     }

@@ -167,7 +167,12 @@ function checkDraft(
     if (!account) {
       return { accountId: t.accountId, account: '(unknown)', platform: '?', errors: ['This account does not exist.'], warnings: [] }
     }
-    const issues = validateForPlatform(getPlatform(account.platform), format, media, t)
+    const platform = getPlatform(account.platform)
+    const issues = validateForPlatform(platform, format, media, t)
+    const live = platform.capabilities.liveFormats
+    if (account.mode === 'live' && live && !live.includes(format)) {
+      issues.push({ severity: 'error', message: `Real ${platform.name} accounts can only publish: ${live.join(', ')}.` })
+    }
     return {
       accountId: account.id,
       account: account.displayName,
