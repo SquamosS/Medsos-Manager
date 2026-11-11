@@ -17,6 +17,11 @@ const UPLOAD_API = 'https://www.googleapis.com/upload/youtube/v3/videos'
 const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly']
 /** Must be a multiple of 256 KiB for resumable uploads. */
 const CHUNK = 8 * 1024 * 1024
+/** 8 MiB in 2 minutes is ~0.5 Mbit/s: slower than that, the connection is treated as stalled. */
+const CHUNK_TIMEOUT_MS = 120_000
+const STATUS_TIMEOUT_MS = 30_000
+/** Consecutive network failures tolerated (with backoff up to 30 s) before giving up. */
+const MAX_STALLS = 8
 
 interface StoredTokens {
   accessToken: string
@@ -112,7 +117,43 @@ async function uploadVideo(token: string, file: Media, metadata: unknown): Promi
   try {
     let offset = 0
     let failures = 0
+    /** After a failure, ask Google how much it already has instead of guessing. */
+    let mustQuery = false
+    const backoff = async (why: unknown): Promise<void> => {
+      if (++failures > MAX_STALLS) {
+        throw new Error(`Upload interrupted after ${MAX_STALLS} network problems in a row: ${why instanceof Error ? why.message : String(why)}`)
+      }
+      mustQuery = true
+      await sleep(Math.min(2000 * 2 ** (failures - 1), 30_000))
+    }
     for (;;) {
+      if (mustQuery) {
+        try {
+          const q = await fetch(session, {
+            method: 'PUT',
+            redirect: 'manual',
+            headers: { 'Content-Range': `bytes */${size}` },
+            signal: AbortSignal.timeout(STATUS_TIMEOUT_MS)
+          })
+          if (q.ok) return (await q.json()) as { id: string }
+          if (q.status === 308) {
+            offset = receivedUpTo(q.headers.get('range'))
+            mustQuery = false
+          } else if (q.status === 404 || q.status === 410) {
+            throw new Error('The YouTube upload session expired. Retry to start the upload again.')
+          } else if (q.status >= 500) {
+            await backoff(`status check answered ${q.status}`)
+            continue
+          } else {
+            throw await apiError(q, 'YouTube upload')
+          }
+        } catch (e) {
+          if (!isNetworkError(e)) throw e
+          await backoff(e)
+          continue
+        }
+      }
+
       const len = Math.min(CHUNK, size - offset)
       const buf = Buffer.alloc(len)
       await handle.read(buf, 0, len, offset)
@@ -122,23 +163,23 @@ async function uploadVideo(token: string, file: Media, metadata: unknown): Promi
           method: 'PUT',
           redirect: 'manual',
           headers: { 'Content-Range': `bytes ${offset}-${offset + len - 1}/${size}` },
-          body: buf
+          body: buf,
+          // A stalled connection otherwise waits for Node's 5-minute default before failing.
+          signal: AbortSignal.timeout(CHUNK_TIMEOUT_MS)
         })
       } catch (e) {
-        if (++failures > 4) throw new Error(`Upload interrupted: ${e instanceof Error ? e.message : String(e)}`)
-        await sleep(2000 * failures)
+        await backoff(e)
         continue
       }
       if (res.status === 308) {
         // "Resume incomplete": the Range header says how much Google has stored so far.
-        const range = res.headers.get('range')
-        offset = range ? Number(range.split('-')[1]) + 1 : offset + len
+        offset = receivedUpTo(res.headers.get('range'))
         failures = 0
         continue
       }
       if (res.ok) return (await res.json()) as { id: string }
-      if (res.status >= 500 && ++failures <= 4) {
-        await sleep(2000 * failures)
+      if (res.status >= 500) {
+        await backoff(`server answered ${res.status}`)
         continue
       }
       throw await apiError(res, 'YouTube upload')
@@ -147,6 +188,12 @@ async function uploadVideo(token: string, file: Media, metadata: unknown): Promi
     await handle.close()
   }
 }
+
+/** "bytes=0-1234" → 1235; no header means Google has nothing yet. */
+const receivedUpTo = (range: string | null): number => (range ? Number(range.split('-')[1]) + 1 : 0)
+
+const isNetworkError = (e: unknown): boolean =>
+  e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError' || e instanceof TypeError)
 
 const clean = (s: string): string => s.replace(/</g, '‹').replace(/>/g, '›')
 
